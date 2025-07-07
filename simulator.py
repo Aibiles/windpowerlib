@@ -500,19 +500,19 @@ def simulate_realtime_data(df, interval=5, enable_mqtt=True, mqtt_config=None):
 
 # 主程序
 if __name__ == "__main__":
-    # 运行模拟
-    df, turbine = simulate_turbine_performance()
-    
+# 运行模拟
+df, turbine = simulate_turbine_performance()
+
     # 显示前10行数据
     print("🔍 模拟数据预览:")
     print(df[['时间', '风速(m/s)', '温度(°C)', '发电量(kW)', '转速(rpm)', '功率密度(W/m²)']].head(10))
-    
-    # 打印统计信息
-    print_statistics(df)
-    
-    # 保存结果到CSV
-    df.to_csv('wind_turbine_simulation_results.csv', index=False)
-    print("\n结果已保存到 wind_turbine_simulation_results.csv")
+
+# 打印统计信息
+print_statistics(df)
+
+# 保存结果到CSV
+df.to_csv('wind_turbine_simulation_results.csv', index=False)
+print("\n结果已保存到 wind_turbine_simulation_results.csv")
     
     # # 可视化结果（可选）
     # try:

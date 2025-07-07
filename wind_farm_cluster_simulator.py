@@ -59,10 +59,11 @@ class WindTurbineData:
 class WindFarmClusterSimulator:
     """风机集群模拟器"""
     
-    def __init__(self, turbine_count: int = 20, enable_mqtt: bool = False, mqtt_config: Dict = None):
+    def __init__(self, turbine_count: int = 20, enable_mqtt: bool = False, mqtt_config: Dict = None, weather_file: str = "weather.csv"):
         self.turbine_count = turbine_count
         self.turbines: List[WindTurbineData] = []
         self.weather_data = None
+        self.weather_file = weather_file  # 添加天气文件路径
         self.current_index = 0
         self.turbine_model = None
         self.rotor_area = 12666  # E-126/4200的扫风面积 m²
@@ -81,7 +82,7 @@ class WindFarmClusterSimulator:
         self._initialize_turbines()
         
         # 加载天气数据
-        self._load_weather_data()
+        self._load_weather_data(self.weather_file)
         
         # 创建风机模型
         self._create_turbine_model()
@@ -115,15 +116,37 @@ class WindFarmClusterSimulator:
                 self.turbines.append(turbine)
                 turbine_id += 1
                 
-    def _load_weather_data(self):
+    def _load_weather_data(self, filename: str = None):
         """加载并更新天气数据时间戳"""
-        # 使用现有的天气数据加载函数
-        weather_df = self.get_weather_data()
-        
-        # 将天气数据时间更新为当前时间
-        weather_df_updated = self.update_weather_to_current_time(weather_df)
-        
-        self.weather_data = weather_df_updated
+        if filename is None:
+            filename = self.weather_file
+            
+        try:
+            # 使用指定的天气数据文件
+            weather_df = self.get_weather_data(filename)
+            
+            # 将天气数据时间更新为当前时间
+            weather_df_updated = self.update_weather_to_current_time(weather_df)
+            
+            self.weather_data = weather_df_updated
+            self.weather_file = filename  # 更新当前使用的文件
+            print(f"✅ 成功加载天气数据文件: {filename}")
+            
+        except Exception as e:
+            print(f"❌ 加载天气数据失败: {e}")
+            if filename != "weather.csv":
+                print(f"⚠️ 回退到默认天气数据文件: weather.csv")
+                try:
+                    weather_df = self.get_weather_data("weather.csv")
+                    weather_df_updated = self.update_weather_to_current_time(weather_df)
+                    self.weather_data = weather_df_updated
+                    self.weather_file = "weather.csv"
+                    print(f"✅ 成功加载默认天气数据文件")
+                except Exception as e2:
+                    print(f"❌ 加载默认天气数据也失败: {e2}")
+                    raise e2
+            else:
+                raise e
         
     def get_weather_data(self, filename="weather.csv", **kwargs):
         """导入天气数据"""
@@ -473,6 +496,11 @@ class WindFarmClusterSimulator:
         
     def run_continuous_simulation(self, update_interval: float = 5.0):
         """运行连续模拟"""
+        import threading
+        import queue
+        import sys
+        import select
+        
         print(f"🌪️  启动风机集群模拟器 - {self.turbine_count}个风机")
         if self.enable_mqtt:
             print(f"📡 MQTT发布已启用")
@@ -482,8 +510,85 @@ class WindFarmClusterSimulator:
         published_turbines = 0
         published_summaries = 0
         
+        # 创建命令队列
+        command_queue = queue.Queue()
+        
+        def input_thread():
+            """处理用户输入的线程"""
+            while True:
+                try:
+                    # 使用非阻塞方式检查输入
+                    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                        line = input().strip()
+                        if line:
+                            command_queue.put(line)
+                except (EOFError, KeyboardInterrupt):
+                    break
+                except:
+                    # 在Windows系统上select可能不工作，使用阻塞输入
+                    try:
+                        line = input().strip()
+                        if line:
+                            command_queue.put(line)
+                    except (EOFError, KeyboardInterrupt):
+                        break
+        
+        # 启动输入线程 (仅在支持的系统上)
+        input_thread_started = False
+        try:
+            if hasattr(select, 'select'):
+                thread = threading.Thread(target=input_thread, daemon=True)
+                thread.start()
+                input_thread_started = True
+        except:
+            pass
+        
+        def process_command(cmd: str):
+            """处理用户命令"""
+            parts = cmd.split()
+            if not parts:
+                return
+                
+            command = parts[0].lower()
+            
+            if command == 'change' and len(parts) > 1:
+                new_file = ' '.join(parts[1:])  # 支持包含空格的文件路径
+                if self.change_weather_data(new_file):
+                    print(f"📈 天气数据已更换，继续模拟...")
+                else:
+                    print(f"⚠️ 继续使用原天气数据...")
+                    
+            elif command == 'info':
+                info = self.get_weather_file_info()
+                print(f"🌤️  当前天气文件信息:")
+                print(f"  文件: {info['filename']}")
+                print(f"  数据条数: {info['data_count']}")
+                print(f"  当前索引: {info['current_index']}")
+                print(f"  时间范围: {info['start_time'][:19]} ~ {info['end_time'][:19]}")
+                
+            elif command == 'help':
+                print(f"💡 可用命令:")
+                print(f"  change <文件路径> - 更换天气数据文件")
+                print(f"  info - 显示当前天气文件信息")
+                print(f"  help - 显示此帮助信息")
+                print(f"  Ctrl+C - 停止模拟")
+                
+            else:
+                print(f"❓ 未知命令: {cmd}")
+                print(f"输入 'help' 查看可用命令")
+        
         try:
             while True:
+                # 处理用户命令
+                try:
+                    while not command_queue.empty():
+                        cmd = command_queue.get_nowait()
+                        print(f"\n⌨️  执行命令: {cmd}")
+                        process_command(cmd)
+                        print("-" * 40)
+                except queue.Empty:
+                    pass
+                
                 self.update_simulation()
                 farm_data = self.get_farm_data()
                 
@@ -494,6 +599,7 @@ class WindFarmClusterSimulator:
                 print(f"🌬️  平均风速: {farm_data['weather']['windSpeed']:.1f} m/s")
                 print(f"🔄 运行中风机: {farm_data['statistics']['runningTurbines']}/{self.turbine_count}")
                 print(f"📈 容量因子: {farm_data['statistics']['capacityFactor']:.1f}%")
+                print(f"📁 天气文件: {os.path.basename(self.weather_file)} (索引: {self.current_index})")
                 
                 # MQTT数据发布
                 if self.enable_mqtt and self.mqtt_connected:
@@ -511,6 +617,9 @@ class WindFarmClusterSimulator:
                     print(f"📤 MQTT发布: 风场汇总 {published_summaries} 条, 风机数据 {published_turbines} 条")
                 elif self.enable_mqtt:
                     print("⚠️ MQTT未连接，跳过数据发布")
+                
+                if input_thread_started:
+                    print("💬 输入命令 (change/info/help):", end=' ', flush=True)
                     
                 print("-" * 80)
                 
@@ -524,13 +633,103 @@ class WindFarmClusterSimulator:
             if self.enable_mqtt:
                 self.disconnect_mqtt()
 
+    def change_weather_data(self, new_filename: str) -> bool:
+        """更换天气数据文件"""
+        try:
+            print(f"🔄 正在更换天气数据文件: {new_filename}")
+            
+            # 验证文件是否存在
+            if not os.path.isfile(new_filename):
+                # 尝试在当前目录下查找
+                current_dir_file = os.path.join(os.path.dirname(__file__), new_filename)
+                if os.path.isfile(current_dir_file):
+                    new_filename = current_dir_file
+                else:
+                    print(f"❌ 文件不存在: {new_filename}")
+                    return False
+            
+            # 备份当前设置
+            old_weather_data = self.weather_data
+            old_weather_file = self.weather_file
+            old_index = self.current_index
+            
+            # 尝试加载新文件
+            self._load_weather_data(new_filename)
+            
+            # 重置索引
+            self.current_index = 0
+            
+            print(f"✅ 天气数据文件更换成功: {os.path.basename(new_filename)}")
+            print(f"📊 数据条数: {len(self.weather_data)}")
+            print(f"📅 数据时间范围: {self.weather_data.index[0]} 到 {self.weather_data.index[-1]}")
+            
+            return True
+            
+        except Exception as e:
+            # 恢复原始设置
+            self.weather_data = old_weather_data
+            self.weather_file = old_weather_file
+            self.current_index = old_index
+            
+            print(f"❌ 更换天气数据文件失败: {e}")
+            print(f"🔄 已恢复到原始文件: {os.path.basename(old_weather_file)}")
+            return False
+    
+    def get_weather_file_info(self) -> Dict[str, Any]:
+        """获取当前天气文件信息"""
+        if self.weather_data is None:
+            return {"error": "没有加载天气数据"}
+            
+        return {
+            "filename": os.path.basename(self.weather_file),
+            "full_path": self.weather_file,
+            "data_count": len(self.weather_data),
+            "start_time": str(self.weather_data.index[0]),
+            "end_time": str(self.weather_data.index[-1]),
+            "current_index": self.current_index,
+            "columns": list(self.weather_data.columns)
+        }
+
 # 主程序
 if __name__ == "__main__":
     print("🌪️  风机集群模拟器配置")
     print("=" * 50)
     
+    # 选择天气数据文件
+    print("📁 选择天气数据文件:")
+    print("1. 使用默认文件 (weather.csv)")
+    print("2. 指定CSV文件路径")
+    
+    weather_file = "weather.csv"  # 默认文件
+    
+    while True:
+        choice = input("是否选择默认文件 (0/1): ").strip()
+        if choice == "0":
+            weather_file = "weather.csv"
+            break
+        elif choice == "1":
+            file_path = input("请输入CSV文件路径: ").strip()
+            if file_path:
+                # 检查文件是否存在
+                if os.path.isfile(file_path):
+                    weather_file = file_path
+                    break
+                else:
+                    # 尝试在当前目录查找
+                    current_dir_file = os.path.join(os.path.dirname(__file__), file_path)
+                    if os.path.isfile(current_dir_file):
+                        weather_file = current_dir_file
+                        break
+                    else:
+                        print(f"❌ 文件不存在: {file_path}")
+                        print("请重新选择或检查文件路径。")
+        else:
+            print("请输入 1 或 2")
+    
+    print(f"📊 选择的天气数据文件: {os.path.basename(weather_file)}")
+    
     # 询问是否启用MQTT
-    print("是否启用MQTT发布？(y/n): ", end='')
+    print("\n📡 是否启用MQTT发布？(y/n): ", end='')
     mqtt_choice = input().lower()
     enable_mqtt = mqtt_choice == 'y'
     
@@ -578,12 +777,35 @@ if __name__ == "__main__":
     
     print("\n" + "=" * 50)
     
-    # 创建20个风机的模拟器
-    simulator = WindFarmClusterSimulator(
-        turbine_count=20, 
-        enable_mqtt=enable_mqtt, 
-        mqtt_config=mqtt_config
-    )
-    
-    # 运行连续模拟
-    simulator.run_continuous_simulation(update_interval=update_interval) 
+    try:
+        # 创建20个风机的模拟器，使用选择的天气数据文件
+        simulator = WindFarmClusterSimulator(
+            turbine_count=20, 
+            enable_mqtt=enable_mqtt, 
+            mqtt_config=mqtt_config,
+            weather_file=weather_file
+        )
+        
+        # 显示天气文件信息
+        weather_info = simulator.get_weather_file_info()
+        print(f"🌤️  天气数据信息:")
+        print(f"  文件: {weather_info['filename']}")
+        print(f"  数据条数: {weather_info['data_count']}")
+        print(f"  时间范围: {weather_info['start_time'][:19]} ~ {weather_info['end_time'][:19]}")
+        
+        print("\n💡 运行期间可以输入以下命令:")
+        print("  'change <文件路径>' - 更换天气数据文件")
+        print("  'info' - 显示当前天气文件信息")
+        print("  'help' - 显示帮助信息")
+        print("  Ctrl+C - 停止模拟")
+        
+        # 运行连续模拟
+        simulator.run_continuous_simulation(update_interval=update_interval)
+        
+    except Exception as e:
+        print(f"❌ 启动模拟器失败: {e}")
+        print("请检查天气数据文件格式是否正确。")
+        print("天气数据文件应包含以下列:")
+        print("  - wind_speed (80)")
+        print("  - temperature (10)")  
+        print("  - pressure (0)") 
