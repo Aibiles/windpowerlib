@@ -1,0 +1,571 @@
+{% extends "base.html" %}
+
+{% block title %}仪表板 - 风机数据监控系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-chart-line"></i> 实时数据仪表板</h2>
+        <p class="text-muted">风场运行状态的实时监控和数据分析</p>
+    </div>
+</div>
+
+<!-- 关键指标卡片 -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="metric-card">
+            <div class="metric-value" id="dashTotalPower">0 kW</div>
+            <div class="metric-label">
+                <i class="fas fa-bolt"></i> 总发电量
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="metric-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+            <div class="metric-value" id="dashEfficiency">0%</div>
+            <div class="metric-label">
+                <i class="fas fa-percentage"></i> 平均效率
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="metric-card" style="background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);">
+            <div class="metric-value" id="dashWindSpeed">0 m/s</div>
+            <div class="metric-label">
+                <i class="fas fa-wind"></i> 平均风速
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-3">
+        <div class="metric-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+            <div class="metric-value" id="dashRunningTurbines">0/0</div>
+            <div class="metric-label">
+                <i class="fas fa-cogs"></i> 运行风机
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 图表区域 -->
+<div class="row mb-4">
+    <!-- 发电量趋势图 -->
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-chart-line"></i> 发电量趋势</h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-primary active" data-time="1h">1小时</button>
+                    <button type="button" class="btn btn-outline-primary" data-time="6h">6小时</button>
+                    <button type="button" class="btn btn-outline-primary" data-time="24h">24小时</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 风速分布图 -->
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-wind"></i> 风速分布</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="windSpeedChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- 效率对比图 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar"></i> 风机效率对比</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="efficiencyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 天气状况图 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-cloud-sun"></i> 天气状况</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="weatherChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 风机状态概览 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-cogs"></i> 风机状态概览</h5>
+                <button class="btn btn-outline-primary btn-sm" onclick="refreshTurbineStatus()">
+                    <i class="fas fa-sync-alt"></i>
+                    刷新
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="turbineStatusGrid" class="turbine-grid">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                        <p>加载风机数据中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 实时日志 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-list-alt"></i> 实时日志</h5>
+                <button class="btn btn-outline-danger btn-sm" onclick="clearLogs()">
+                    <i class="fas fa-trash"></i>
+                    清空
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="realtimeLogs" style="height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.9rem;">
+                    <div class="text-muted">等待数据更新...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // 图表变量
+    let powerChart, windSpeedChart, efficiencyChart, weatherChart;
+    let powerData = [];
+    let timeLabels = [];
+    let turbineData = [];
+    let logs = [];
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+        loadInitialData();
+        setupEventListeners();
+    });
+
+    // Socket.IO 事件监听
+    socket.on('farm_data_update', function(data) {
+        updateDashboardData(data);
+        addLog(`风场数据更新: 总发电量 ${formatPower(data.totalPower)}`);
+    });
+
+    socket.on('turbine_data_update', function(data) {
+        updateTurbineData(data);
+    });
+
+    // 初始化图表
+    function initializeCharts() {
+        // 发电量趋势图
+        const powerCtx = document.getElementById('powerChart').getContext('2d');
+        powerChart = new Chart(powerCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: '总发电量 (kW)',
+                    data: [],
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '发电量 (kW)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '时间'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+        // 风速分布图
+        const windCtx = document.getElementById('windSpeedChart').getContext('2d');
+        windSpeedChart = new Chart(windCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['低风速 (0-5 m/s)', '中风速 (5-10 m/s)', '高风速 (10+ m/s)'],
+                datasets: [{
+                    data: [0, 0, 0],
+                    backgroundColor: ['#e74c3c', '#f39c12', '#27ae60'],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+
+        // 效率对比图
+        const effCtx = document.getElementById('efficiencyChart').getContext('2d');
+        efficiencyChart = new Chart(effCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: '效率 (%)',
+                    data: [],
+                    backgroundColor: 'rgba(46, 204, 113, 0.8)',
+                    borderColor: '#2ecc71',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: '效率 (%)'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+        // 天气状况图
+        const weatherCtx = document.getElementById('weatherChart').getContext('2d');
+        weatherChart = new Chart(weatherCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: '温度 (°C)',
+                        data: [],
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        yAxisID: 'y',
+                        tension: 0.4
+                    },
+                    {
+                        label: '气压 (hPa)',
+                        data: [],
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        yAxisID: 'y1',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: '温度 (°C)'
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: '气压 (hPa)'
+                        },
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                    }
+                }
+            }
+        });
+    }
+
+    // 加载初始数据
+    async function loadInitialData() {
+        try {
+            const status = await apiRequest('/api/status');
+            if (status.simulator_initialized) {
+                const farmData = await apiRequest('/api/farm-data');
+                updateDashboardData(farmData);
+                
+                const turbines = await apiRequest('/api/turbines');
+                turbineData = turbines;
+                updateTurbineGrid();
+                updateEfficiencyChart();
+            }
+        } catch (error) {
+            console.error('加载初始数据失败:', error);
+        }
+    }
+
+    // 设置事件监听器
+    function setupEventListeners() {
+        // 时间范围切换
+        document.querySelectorAll('[data-time]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('[data-time]').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                updateTimeRange(this.dataset.time);
+            });
+        });
+    }
+
+    // 更新仪表板数据
+    function updateDashboardData(data) {
+        if (!data) return;
+
+        // 更新关键指标
+        document.getElementById('dashTotalPower').textContent = formatPower(data.totalPower);
+        document.getElementById('dashEfficiency').textContent = data.efficiency + '%';
+        document.getElementById('dashWindSpeed').textContent = (data.windSpeed || 0).toFixed(1) + ' m/s';
+        document.getElementById('dashRunningTurbines').textContent = `${data.runningTurbines || 0}/${data.turbineCount || 0}`;
+
+        // 更新发电量趋势图
+        const now = new Date().toLocaleTimeString();
+        timeLabels.push(now);
+        powerData.push(data.totalPower);
+
+        // 保持最近30个数据点
+        if (timeLabels.length > 30) {
+            timeLabels.shift();
+            powerData.shift();
+        }
+
+        powerChart.data.labels = timeLabels;
+        powerChart.data.datasets[0].data = powerData;
+        powerChart.update('none');
+
+        // 更新风速分布
+        updateWindSpeedDistribution(data.windSpeed || 0);
+
+        // 更新天气图表
+        updateWeatherChart(data);
+    }
+
+    // 更新风机数据
+    function updateTurbineData(data) {
+        const existingIndex = turbineData.findIndex(t => t.id === data.id);
+        if (existingIndex !== -1) {
+            turbineData[existingIndex] = data;
+        } else {
+            turbineData.push(data);
+        }
+        
+        updateTurbineGrid();
+        updateEfficiencyChart();
+    }
+
+    // 更新风速分布
+    function updateWindSpeedDistribution(windSpeed) {
+        let lowCount = 0, mediumCount = 0, highCount = 0;
+        
+        turbineData.forEach(turbine => {
+            const speed = turbine.windSpeed || 0;
+            if (speed < 5) lowCount++;
+            else if (speed < 10) mediumCount++;
+            else highCount++;
+        });
+
+        windSpeedChart.data.datasets[0].data = [lowCount, mediumCount, highCount];
+        windSpeedChart.update('none');
+    }
+
+    // 更新天气图表
+    function updateWeatherChart(data) {
+        const now = new Date().toLocaleTimeString();
+        
+        // 温度和气压数据
+        const temperature = data.temperature || 20;
+        const pressure = data.pressure ? data.pressure / 100 : 1013; // 转换为hPa
+
+        weatherChart.data.labels.push(now);
+        weatherChart.data.datasets[0].data.push(temperature);
+        weatherChart.data.datasets[1].data.push(pressure);
+
+        // 保持最近20个数据点
+        if (weatherChart.data.labels.length > 20) {
+            weatherChart.data.labels.shift();
+            weatherChart.data.datasets[0].data.shift();
+            weatherChart.data.datasets[1].data.shift();
+        }
+
+        weatherChart.update('none');
+    }
+
+    // 更新效率图表
+    function updateEfficiencyChart() {
+        if (turbineData.length === 0) return;
+
+        const labels = turbineData.map(t => `风机${t.id}`);
+        const efficiencies = turbineData.map(t => t.efficiency || 0);
+
+        efficiencyChart.data.labels = labels;
+        efficiencyChart.data.datasets[0].data = efficiencies;
+        efficiencyChart.update('none');
+    }
+
+    // 更新风机网格
+    function updateTurbineGrid() {
+        const grid = document.getElementById('turbineStatusGrid');
+        
+        if (turbineData.length === 0) {
+            grid.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-info-circle fa-2x mb-3"></i>
+                    <p>暂无风机数据</p>
+                </div>
+            `;
+            return;
+        }
+
+        let gridHtml = '';
+        turbineData.forEach(turbine => {
+            const statusColor = getStatusColor(turbine.status);
+            gridHtml += `
+                <div class="turbine-card">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">
+                            <i class="fas fa-cog"></i>
+                            ${turbine.name || `风机${turbine.id}`}
+                        </h6>
+                        <span class="badge bg-${statusColor}">
+                            ${getStatusText(turbine.status)}
+                        </span>
+                    </div>
+                    <div class="row">
+                        <div class="col-6">
+                            <small class="text-muted">发电量</small>
+                            <div class="fw-bold">${formatPower(turbine.power)}</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">效率</small>
+                            <div class="fw-bold">${turbine.efficiency}%</div>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-6">
+                            <small class="text-muted">风速</small>
+                            <div>${turbine.windSpeed.toFixed(1)} m/s</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">转速</small>
+                            <div>${turbine.rotationSpeed.toFixed(0)} RPM</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        grid.innerHTML = gridHtml;
+    }
+
+    // 更新时间范围
+    function updateTimeRange(range) {
+        // 这里可以根据时间范围重新加载数据
+        addLog(`切换时间范围到: ${range}`);
+    }
+
+    // 刷新风机状态
+    async function refreshTurbineStatus() {
+        try {
+            const turbines = await apiRequest('/api/turbines');
+            turbineData = turbines;
+            updateTurbineGrid();
+            updateEfficiencyChart();
+            addLog('风机状态已刷新');
+        } catch (error) {
+            console.error('刷新风机状态失败:', error);
+        }
+    }
+
+    // 添加日志
+    function addLog(message) {
+        const now = new Date().toLocaleTimeString();
+        logs.unshift(`[${now}] ${message}`);
+        
+        // 保持最近50条日志
+        if (logs.length > 50) {
+            logs = logs.slice(0, 50);
+        }
+        
+        updateLogsDisplay();
+    }
+
+    // 更新日志显示
+    function updateLogsDisplay() {
+        const logsContainer = document.getElementById('realtimeLogs');
+        logsContainer.innerHTML = logs.map(log => `<div>${log}</div>`).join('');
+        logsContainer.scrollTop = 0;
+    }
+
+    // 清空日志
+    function clearLogs() {
+        logs = [];
+        updateLogsDisplay();
+        addLog('日志已清空');
+    }
+</script>
+{% endblock %} 

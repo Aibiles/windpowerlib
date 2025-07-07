@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+
+{% block title %}数据上传 - 风机数据监控系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-upload"></i> 天气数据上传</h2>
+        <p class="text-muted">上传CSV格式的天气数据文件来更新系统数据</p>
+    </div>
+</div>
+
+<!-- 上传区域 -->
+<div class="row mb-4">
+    <div class="col-lg-8 col-md-10 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-cloud-upload-alt"></i> 文件上传</h4>
+            </div>
+            <div class="card-body">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div id="dropZone" class="border-dashed border-3 border-primary rounded p-5 text-center mb-3"
+                         style="min-height: 200px; cursor: pointer; transition: all 0.3s ease;">
+                        <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
+                        <h5>拖拽文件到此处或点击选择文件</h5>
+                        <p class="text-muted">支持CSV格式，最大文件大小: 50MB</p>
+                        <input type="file" id="fileInput" name="file" accept=".csv" style="display: none;">
+                        <button type="button" class="btn btn-primary btn-custom" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-folder-open"></i>
+                            选择文件
+                        </button>
+                    </div>
+                    
+                    <div id="fileInfo" style="display: none;" class="alert alert-info">
+                        <h6><i class="fas fa-file-csv"></i> 选中的文件:</h6>
+                        <div id="fileName"></div>
+                        <div id="fileSize"></div>
+                        <div id="fileType"></div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="submit" id="uploadBtn" class="btn btn-success btn-custom" disabled>
+                            <i class="fas fa-upload"></i>
+                            上传文件
+                        </button>
+                        <button type="button" id="clearBtn" class="btn btn-secondary btn-custom" onclick="clearFile()">
+                            <i class="fas fa-times"></i>
+                            清空
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 文件格式说明 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-info-circle"></i> 文件格式要求</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>必须包含的列:</h5>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">
+                                <i class="fas fa-wind text-primary"></i>
+                                <strong>wind_speed (80m):</strong> 80米高度风速 (m/s)
+                            </li>
+                            <li class="list-group-item">
+                                <i class="fas fa-thermometer-half text-warning"></i>
+                                <strong>temperature (10m):</strong> 10米高度温度 (°C)
+                            </li>
+                            <li class="list-group-item">
+                                <i class="fas fa-tachometer-alt text-info"></i>
+                                <strong>pressure (0m):</strong> 地面气压 (Pa)
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>格式要求:</h5>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">
+                                <i class="fas fa-calendar text-success"></i>
+                                第一列必须是日期时间索引
+                            </li>
+                            <li class="list-group-item">
+                                <i class="fas fa-layer-group text-primary"></i>
+                                使用多层列头结构
+                            </li>
+                            <li class="list-group-item">
+                                <i class="fas fa-chart-line text-warning"></i>
+                                至少包含100行数据
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <h6>示例格式:</h6>
+                    <pre class="bg-light p-3 rounded"><code>,wind_speed,,temperature,,pressure,
+,80,,10,,0,
+2024-01-01 00:00:00,8.5,,15.2,,101325,
+2024-01-01 01:00:00,9.1,,14.8,,101280,
+...</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 上传历史 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4><i class="fas fa-history"></i> 上传历史</h4>
+                <button class="btn btn-outline-primary btn-sm" onclick="refreshHistory()">
+                    <i class="fas fa-sync-alt"></i>
+                    刷新
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="uploadHistory">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-inbox fa-2x mb-3"></i>
+                        <p>暂无上传记录</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 进度模态框 -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-upload"></i>
+                    文件上传中
+                </h5>
+            </div>
+            <div class="modal-body text-center">
+                <div class="progress mb-3">
+                    <div id="uploadProgress" class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" style="width: 0%"></div>
+                </div>
+                <p id="uploadStatus">正在上传文件...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let selectedFile = null;
+    
+    // DOM元素
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const fileType = document.getElementById('fileType');
+    const uploadModal = new bootstrap.Modal(document.getElementById('uploadModal'));
+    const uploadProgress = document.getElementById('uploadProgress');
+    const uploadStatus = document.getElementById('uploadStatus');
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        setupDragAndDrop();
+        setupFileInput();
+        setupUploadForm();
+        loadUploadHistory();
+    });
+
+    // 设置拖拽上传
+    function setupDragAndDrop() {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropZone.classList.add('border-success');
+            dropZone.style.backgroundColor = '#f8f9fa';
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('border-success');
+            dropZone.style.backgroundColor = '';
+        }
+
+        dropZone.addEventListener('drop', handleDrop, false);
+        dropZone.addEventListener('click', () => fileInput.click());
+    }
+
+    // 处理文件拖拽
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        
+        if (files.length > 0) {
+            handleFile(files[0]);
+        }
+    }
+
+    // 设置文件输入
+    function setupFileInput() {
+        fileInput.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+    }
+
+    // 处理文件选择
+    function handleFile(file) {
+        // 检查文件类型
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            showAlert('请选择CSV格式的文件', 'warning');
+            return;
+        }
+
+        // 检查文件大小 (50MB)
+        if (file.size > 50 * 1024 * 1024) {
+            showAlert('文件大小不能超过50MB', 'warning');
+            return;
+        }
+
+        selectedFile = file;
+        showFileInfo(file);
+        uploadBtn.disabled = false;
+    }
+
+    // 显示文件信息
+    function showFileInfo(file) {
+        fileName.innerHTML = `<strong>文件名:</strong> ${file.name}`;
+        fileSize.innerHTML = `<strong>文件大小:</strong> ${formatFileSize(file.size)}`;
+        fileType.innerHTML = `<strong>文件类型:</strong> ${file.type || 'text/csv'}`;
+        fileInfo.style.display = 'block';
+    }
+
+    // 格式化文件大小
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // 清空文件选择
+    function clearFile() {
+        selectedFile = null;
+        fileInput.value = '';
+        fileInfo.style.display = 'none';
+        uploadBtn.disabled = true;
+    }
+
+    // 设置上传表单
+    function setupUploadForm() {
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!selectedFile) {
+                showAlert('请先选择文件', 'warning');
+                return;
+            }
+
+            await uploadFile();
+        });
+    }
+
+    // 上传文件
+    async function uploadFile() {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        try {
+            // 显示进度模态框
+            uploadModal.show();
+            updateUploadProgress(0, '正在上传文件...');
+
+            const xhr = new XMLHttpRequest();
+            
+            // 监听上传进度
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    updateUploadProgress(percentComplete, `上传中... ${percentComplete.toFixed(1)}%`);
+                }
+            });
+
+            // 处理响应
+            xhr.addEventListener('load', function() {
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    updateUploadProgress(100, '上传完成！');
+                    
+                    setTimeout(() => {
+                        uploadModal.hide();
+                        showAlert(response.message, 'success');
+                        clearFile();
+                        loadUploadHistory();
+                    }, 1000);
+                } else {
+                    const error = JSON.parse(xhr.responseText);
+                    updateUploadProgress(0, '上传失败');
+                    setTimeout(() => {
+                        uploadModal.hide();
+                        showAlert(error.error || '上传失败', 'danger');
+                    }, 1000);
+                }
+            });
+
+            xhr.addEventListener('error', function() {
+                updateUploadProgress(0, '网络错误');
+                setTimeout(() => {
+                    uploadModal.hide();
+                    showAlert('网络错误，请检查连接', 'danger');
+                }, 1000);
+            });
+
+            xhr.open('POST', '/api/upload-weather');
+            xhr.send(formData);
+
+        } catch (error) {
+            uploadModal.hide();
+            showAlert('上传失败: ' + error.message, 'danger');
+        }
+    }
+
+    // 更新上传进度
+    function updateUploadProgress(percent, status) {
+        uploadProgress.style.width = percent + '%';
+        uploadProgress.setAttribute('aria-valuenow', percent);
+        uploadStatus.textContent = status;
+    }
+
+    // 加载上传历史（模拟数据）
+    function loadUploadHistory() {
+        const historyContainer = document.getElementById('uploadHistory');
+        
+        // 这里可以从API加载真实的上传历史
+        // 暂时显示示例数据
+        const sampleHistory = [
+            {
+                filename: 'weather_20241201_143022_data.csv',
+                uploadTime: '2024-12-01 14:30:22',
+                fileSize: '2.3 MB',
+                status: 'success'
+            }
+        ];
+
+        if (sampleHistory.length === 0) {
+            historyContainer.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-inbox fa-2x mb-3"></i>
+                    <p>暂无上传记录</p>
+                </div>
+            `;
+        } else {
+            let historyHtml = '';
+            sampleHistory.forEach(item => {
+                historyHtml += `
+                    <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                        <div>
+                            <h6 class="mb-1">
+                                <i class="fas fa-file-csv text-success"></i>
+                                ${item.filename}
+                            </h6>
+                            <small class="text-muted">
+                                <i class="fas fa-clock"></i> ${item.uploadTime} |
+                                <i class="fas fa-weight"></i> ${item.fileSize}
+                            </small>
+                        </div>
+                        <span class="badge bg-success">
+                            <i class="fas fa-check"></i>
+                            成功
+                        </span>
+                    </div>
+                `;
+            });
+            historyContainer.innerHTML = historyHtml;
+        }
+    }
+
+    // 刷新历史记录
+    function refreshHistory() {
+        loadUploadHistory();
+        showAlert('历史记录已刷新', 'info');
+    }
+</script>
+{% endblock %} 

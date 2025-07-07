@@ -1,0 +1,11 @@
+flask>=2.0.0
+flask-cors>=4.0.0
+flask-socketio>=5.0.0
+pandas>=1.3.0
+numpy>=1.21.0
+matplotlib>=3.5.0
+requests>=2.25.0
+windpowerlib>=0.2.0
+python-socketio>=5.0.0
+eventlet>=0.33.0
+paho-mqtt>=1.6.0 

@@ -1,0 +1,570 @@
+{% extends "base.html" %}
+
+{% block title %}风机列表 - 风机数据监控系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-cogs"></i> 风机列表</h2>
+        <p class="text-muted">查看和管理所有风机的详细状态信息</p>
+    </div>
+</div>
+
+<!-- 控制栏 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <input type="text" class="form-control" id="searchInput" 
+                                   placeholder="搜索风机ID或名称...">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="statusFilter">
+                            <option value="">所有状态</option>
+                            <option value="running">运行中</option>
+                            <option value="maintenance">维护中</option>
+                            <option value="stopped">停机</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="sortBy">
+                            <option value="id">按ID排序</option>
+                            <option value="power">按发电量排序</option>
+                            <option value="efficiency">按效率排序</option>
+                            <option value="windSpeed">按风速排序</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary w-100" onclick="refreshTurbineList()">
+                            <i class="fas fa-sync-alt"></i>
+                            刷新
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 统计概览 -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card border-start border-success border-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title text-success">运行中</h5>
+                        <h3 id="runningCount" class="mb-0">0</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-play-circle fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card border-start border-warning border-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title text-warning">维护中</h5>
+                        <h3 id="maintenanceCount" class="mb-0">0</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-tools fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card border-start border-danger border-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title text-danger">停机</h5>
+                        <h3 id="stoppedCount" class="mb-0">0</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-stop-circle fa-2x text-danger"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card border-start border-primary border-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title text-primary">总计</h5>
+                        <h3 id="totalCount" class="mb-0">0</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-wind fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 风机列表 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-list"></i> 风机详情</h5>
+                <div>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="toggleView('grid')">
+                        <i class="fas fa-th"></i>
+                        网格视图
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="toggleView('table')">
+                        <i class="fas fa-table"></i>
+                        表格视图
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- 网格视图 -->
+                <div id="gridView" class="turbine-grid">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                        <p>加载风机数据中...</p>
+                    </div>
+                </div>
+                
+                <!-- 表格视图 -->
+                <div id="tableView" style="display: none;">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>名称</th>
+                                    <th>状态</th>
+                                    <th>发电量</th>
+                                    <th>效率</th>
+                                    <th>风速</th>
+                                    <th>转速</th>
+                                    <th>温度</th>
+                                    <th>最后维护</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="turbineTableBody">
+                                <tr>
+                                    <td colspan="10" class="text-center text-muted">
+                                        <i class="fas fa-spinner fa-spin"></i>
+                                        加载中...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 风机详情模态框 -->
+<div class="modal fade" id="turbineModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cog"></i>
+                    <span id="modalTurbineName">风机详情</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="turbineDetails">
+                    <!-- 详情内容将通过JavaScript动态填充 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="refreshDetailsBtn">
+                    <i class="fas fa-sync-alt"></i>
+                    刷新数据
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let turbineData = [];
+    let filteredData = [];
+    let currentView = 'grid';
+    let currentSort = 'id';
+    let currentFilter = '';
+    let currentSearch = '';
+    
+    const turbineModal = new bootstrap.Modal(document.getElementById('turbineModal'));
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        loadTurbineData();
+        setupEventListeners();
+    });
+
+    // Socket.IO 事件监听
+    socket.on('turbine_data_update', function(data) {
+        updateTurbineInList(data);
+    });
+
+    // 设置事件监听器
+    function setupEventListeners() {
+        document.getElementById('searchInput').addEventListener('input', handleSearch);
+        document.getElementById('statusFilter').addEventListener('change', handleFilter);
+        document.getElementById('sortBy').addEventListener('change', handleSort);
+        document.getElementById('refreshDetailsBtn').addEventListener('click', refreshTurbineDetails);
+    }
+
+    // 加载风机数据
+    async function loadTurbineData() {
+        try {
+            const turbines = await apiRequest('/api/turbines');
+            turbineData = turbines;
+            applyFiltersAndSort();
+            updateStatistics();
+        } catch (error) {
+            console.error('加载风机数据失败:', error);
+            showAlert('加载风机数据失败', 'danger');
+        }
+    }
+
+    // 刷新风机列表
+    async function refreshTurbineList() {
+        await loadTurbineData();
+        showAlert('风机列表已刷新', 'success');
+    }
+
+    // 更新列表中的风机数据
+    function updateTurbineInList(data) {
+        const index = turbineData.findIndex(t => t.id === data.id);
+        if (index !== -1) {
+            turbineData[index] = data;
+            applyFiltersAndSort();
+            updateStatistics();
+        }
+    }
+
+    // 处理搜索
+    function handleSearch(e) {
+        currentSearch = e.target.value.toLowerCase();
+        applyFiltersAndSort();
+    }
+
+    // 处理过滤
+    function handleFilter(e) {
+        currentFilter = e.target.value;
+        applyFiltersAndSort();
+    }
+
+    // 处理排序
+    function handleSort(e) {
+        currentSort = e.target.value;
+        applyFiltersAndSort();
+    }
+
+    // 应用过滤和排序
+    function applyFiltersAndSort() {
+        // 过滤数据
+        filteredData = turbineData.filter(turbine => {
+            // 搜索过滤
+            const searchMatch = !currentSearch || 
+                turbine.id.toString().includes(currentSearch) ||
+                (turbine.name && turbine.name.toLowerCase().includes(currentSearch));
+            
+            // 状态过滤
+            const statusMatch = !currentFilter || turbine.status === currentFilter;
+            
+            return searchMatch && statusMatch;
+        });
+
+        // 排序数据
+        filteredData.sort((a, b) => {
+            switch (currentSort) {
+                case 'id':
+                    return a.id - b.id;
+                case 'power':
+                    return b.power - a.power;
+                case 'efficiency':
+                    return b.efficiency - a.efficiency;
+                case 'windSpeed':
+                    return b.windSpeed - a.windSpeed;
+                default:
+                    return a.id - b.id;
+            }
+        });
+
+        // 更新显示
+        updateDisplay();
+    }
+
+    // 更新显示
+    function updateDisplay() {
+        if (currentView === 'grid') {
+            updateGridView();
+        } else {
+            updateTableView();
+        }
+    }
+
+    // 更新网格视图
+    function updateGridView() {
+        const gridContainer = document.getElementById('gridView');
+        
+        if (filteredData.length === 0) {
+            gridContainer.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-search fa-2x mb-3"></i>
+                    <p>没有找到符合条件的风机</p>
+                </div>
+            `;
+            return;
+        }
+
+        let gridHtml = '';
+        filteredData.forEach(turbine => {
+            const statusColor = getStatusColor(turbine.status);
+            gridHtml += `
+                <div class="turbine-card" onclick="showTurbineDetails(${turbine.id})">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">
+                            <i class="fas fa-cog"></i>
+                            ${turbine.name || `风机${turbine.id}`}
+                        </h6>
+                        <span class="badge bg-${statusColor}">
+                            ${getStatusText(turbine.status)}
+                        </span>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <small class="text-muted">发电量</small>
+                            <div class="fw-bold text-primary">${formatPower(turbine.power)}</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">效率</small>
+                            <div class="fw-bold text-success">${turbine.efficiency}%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <small class="text-muted">风速</small>
+                            <div>${turbine.windSpeed.toFixed(1)} m/s</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">转速</small>
+                            <div>${turbine.rotationSpeed.toFixed(0)} RPM</div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-6">
+                            <small class="text-muted">温度</small>
+                            <div>${turbine.temperature.toFixed(1)}°C</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">气压</small>
+                            <div>${(turbine.pressure/100).toFixed(0)} hPa</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 pt-2 border-top">
+                        <small class="text-muted">
+                            <i class="fas fa-clock"></i>
+                            更新: ${turbine.timestamp}
+                        </small>
+                    </div>
+                </div>
+            `;
+        });
+        
+        gridContainer.innerHTML = gridHtml;
+    }
+
+    // 更新表格视图
+    function updateTableView() {
+        const tableBody = document.getElementById('turbineTableBody');
+        
+        if (filteredData.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="text-center text-muted">
+                        <i class="fas fa-search"></i>
+                        没有找到符合条件的风机
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        let tableHtml = '';
+        filteredData.forEach(turbine => {
+            const statusColor = getStatusColor(turbine.status);
+            tableHtml += `
+                <tr style="cursor: pointer;" onclick="showTurbineDetails(${turbine.id})">
+                    <td><strong>${turbine.id}</strong></td>
+                    <td>${turbine.name || `风机${turbine.id}`}</td>
+                    <td>
+                        <span class="badge bg-${statusColor}">
+                            ${getStatusText(turbine.status)}
+                        </span>
+                    </td>
+                    <td><strong>${formatPower(turbine.power)}</strong></td>
+                    <td><span class="text-success">${turbine.efficiency}%</span></td>
+                    <td>${turbine.windSpeed.toFixed(1)} m/s</td>
+                    <td>${turbine.rotationSpeed.toFixed(0)} RPM</td>
+                    <td>${turbine.temperature.toFixed(1)}°C</td>
+                    <td>
+                        <small>${turbine.lastMaintenance}</small>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); showTurbineDetails(${turbine.id})">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        tableBody.innerHTML = tableHtml;
+    }
+
+    // 更新统计信息
+    function updateStatistics() {
+        const running = turbineData.filter(t => t.status === 'running').length;
+        const maintenance = turbineData.filter(t => t.status === 'maintenance').length;
+        const stopped = turbineData.filter(t => t.status === 'stopped').length;
+        const total = turbineData.length;
+
+        document.getElementById('runningCount').textContent = running;
+        document.getElementById('maintenanceCount').textContent = maintenance;
+        document.getElementById('stoppedCount').textContent = stopped;
+        document.getElementById('totalCount').textContent = total;
+    }
+
+    // 切换视图
+    function toggleView(view) {
+        currentView = view;
+        
+        // 更新按钮状态
+        document.querySelectorAll('[onclick^="toggleView"]').forEach(btn => {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-outline-secondary');
+        });
+        
+        event.target.classList.remove('btn-outline-secondary');
+        event.target.classList.add('btn-primary');
+        
+        // 切换视图
+        if (view === 'grid') {
+            document.getElementById('gridView').style.display = 'block';
+            document.getElementById('tableView').style.display = 'none';
+        } else {
+            document.getElementById('gridView').style.display = 'none';
+            document.getElementById('tableView').style.display = 'block';
+        }
+        
+        updateDisplay();
+    }
+
+    // 显示风机详情
+    async function showTurbineDetails(turbineId) {
+        try {
+            const turbine = await apiRequest(`/api/turbine/${turbineId}`);
+            
+            document.getElementById('modalTurbineName').textContent = 
+                turbine.name || `风机${turbine.id}`;
+            
+            const detailsHtml = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-info-circle"></i> 基本信息</h6>
+                        <table class="table table-sm">
+                            <tr><td>ID:</td><td><strong>${turbine.id}</strong></td></tr>
+                            <tr><td>名称:</td><td>${turbine.name || `风机${turbine.id}`}</td></tr>
+                            <tr><td>状态:</td><td><span class="badge bg-${getStatusColor(turbine.status)}">${getStatusText(turbine.status)}</span></td></tr>
+                            <tr><td>位置:</td><td>X: ${turbine.position.x}, Y: ${turbine.position.y}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-bolt"></i> 发电数据</h6>
+                        <table class="table table-sm">
+                            <tr><td>当前发电量:</td><td><strong>${formatPower(turbine.power)}</strong></td></tr>
+                            <tr><td>累计发电量:</td><td>${formatPower(turbine.totalGeneration)}</td></tr>
+                            <tr><td>效率:</td><td><span class="text-success">${turbine.efficiency}%</span></td></tr>
+                            <tr><td>功率密度:</td><td>${turbine.powerDensity.toFixed(1)} W/m²</td></tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-cogs"></i> 运行参数</h6>
+                        <table class="table table-sm">
+                            <tr><td>风速:</td><td>${turbine.windSpeed.toFixed(2)} m/s</td></tr>
+                            <tr><td>转速:</td><td>${turbine.rotationSpeed.toFixed(1)} RPM</td></tr>
+                            <tr><td>空气密度:</td><td>${turbine.airDensity.toFixed(4)} kg/m³</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-thermometer-half"></i> 环境数据</h6>
+                        <table class="table table-sm">
+                            <tr><td>温度:</td><td>${turbine.temperature.toFixed(2)}°C</td></tr>
+                            <tr><td>气压:</td><td>${(turbine.pressure/100).toFixed(1)} hPa</td></tr>
+                            <tr><td>最后维护:</td><td>${turbine.lastMaintenance}</td></tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <h6><i class="fas fa-clock"></i> 时间信息</h6>
+                    <p class="text-muted mb-0">最后更新: ${turbine.timestamp}</p>
+                </div>
+            `;
+            
+            document.getElementById('turbineDetails').innerHTML = detailsHtml;
+            
+            // 存储当前查看的风机ID
+            document.getElementById('refreshDetailsBtn').dataset.turbineId = turbineId;
+            
+            turbineModal.show();
+            
+        } catch (error) {
+            console.error('获取风机详情失败:', error);
+            showAlert('获取风机详情失败', 'danger');
+        }
+    }
+
+    // 刷新风机详情
+    async function refreshTurbineDetails() {
+        const turbineId = document.getElementById('refreshDetailsBtn').dataset.turbineId;
+        if (turbineId) {
+            await showTurbineDetails(parseInt(turbineId));
+            showAlert('风机详情已刷新', 'success');
+        }
+    }
+</script>
+{% endblock %} 
